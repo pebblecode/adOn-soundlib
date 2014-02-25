@@ -1,0 +1,9 @@
+{
+  "node": true,
+  "predef": [
+    "describe",
+    "it",
+    "beforeEach",
+    "expect"
+  ]
+}
