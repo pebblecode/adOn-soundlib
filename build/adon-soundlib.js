@@ -30,7 +30,8 @@ Codec.prototype.toFrequency = function(char) {
   var index = this.characters.indexOf(char);
 
   if (index < 0) {
-    throw new Error('The character ' + char + ' is not within range');
+    //throw new Error('The character ' + char + ' is not within range');
+    return;
   }
 
   var percent = index / this.characters.length;
@@ -43,14 +44,16 @@ Codec.prototype.toCharacter = function(frequency) {
 
   if (!(this.options.minFreq < frequency && frequency < this.options.maxFreq)) {
     // Do error handling here, for now we just return an error
-    throw new Error('This frequency is not within the allowed range');
+    //throw new Error('This frequency is not within the allowed range');
+    return;
   }
 
   var percent = (frequency - this.options.minFreq) / this.frequencyRange;
   var index = Math.round(this.characters.length * percent);
   var character = this.characters[index];
   if (!character) {
-    throw new Error('No character was found at frequency ' + frequency);
+    //throw new Error('No character was found at frequency ' + frequency);
+    return;
   }
 
   return character;
@@ -73,13 +76,13 @@ Codec.prototype.encodeString = function(characterString) {
 };
 
 module.exports = Codec;
-},{"lodash":46}],"./lib/index.js":[function(require,module,exports){
-module.exports=require('KfiuDJ');
-},{}],"KfiuDJ":[function(require,module,exports){
+},{"lodash":46}],"KfiuDJ":[function(require,module,exports){
 exports.Codec = require('./codec.js');
 exports.Sender = require('./sender.js');
 exports.Listener = require('./listener.js');
-},{"./codec.js":1,"./listener.js":4,"./sender.js":5}],4:[function(require,module,exports){
+},{"./codec.js":1,"./listener.js":4,"./sender.js":5}],"./lib/index.js":[function(require,module,exports){
+module.exports=require('KfiuDJ');
+},{}],4:[function(require,module,exports){
 var AudioContext = window.AudioContext || window.webkitAudioContext;
 navigator.getMedia = ( navigator.getUserMedia ||
                  navigator.webkitGetUserMedia ||
