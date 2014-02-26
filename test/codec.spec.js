@@ -24,8 +24,8 @@ describe('Codec', function() {
   it('Should encode a string of character to a frequency array', function() {
     var str = 'foobar';
     var freqArray = codec.encodeString(str);
-    expect(freqArray.length).toBe(6);
-    expect(freqArray[4]).toBe(18523);
+    expect(freqArray.length).toBe(11);  // 11 as there are stop characters
+    expect(freqArray[8]).toBe(18523);  // 8  as there are stop characters
   });
 
   it('Should throw an error when encoding a single character', function() {

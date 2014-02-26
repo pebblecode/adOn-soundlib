@@ -1,0 +1,20 @@
+<!doctype html>
+<html>
+<head>
+  <title>Sender example</title>
+</head>
+
+<body>
+  
+  <script src="../build/adon-soundlib.js"></script>
+  <script>
+    var adOnSoundLib = require('./lib/index.js')
+    var listener = window.listener = new adOnSoundLib.Listener()
+    listener.on('message', function() {
+      console.log(arguments);
+    });
+
+    listener.start();
+  </script>
+</body>
+</html>

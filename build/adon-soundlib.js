@@ -73,24 +73,220 @@ Codec.prototype.encodeString = function(characterString) {
 };
 
 module.exports = Codec;
-},{"lodash":45}],"KfiuDJ":[function(require,module,exports){
-exports.Codec = require('./codec');
-exports.Sender = require('./sender');
-},{"./codec":1,"./sender":4}],"./lib/index.js":[function(require,module,exports){
+},{"lodash":46}],"./lib/index.js":[function(require,module,exports){
 module.exports=require('KfiuDJ');
-},{}],4:[function(require,module,exports){
+},{}],"KfiuDJ":[function(require,module,exports){
+exports.Codec = require('./codec.js');
+exports.Sender = require('./sender.js');
+exports.Listener = require('./listener.js');
+},{"./codec.js":1,"./listener.js":4,"./sender.js":5}],4:[function(require,module,exports){
+var AudioContext = window.AudioContext || window.webkitAudioContext;
+navigator.getMedia = ( navigator.getUserMedia ||
+                 navigator.webkitGetUserMedia ||
+                 navigator.mozGetUserMedia ||
+                 navigator.msGetUserMedia);
+
+var _ = require('lodash');
+var Promise = require('bluebird');
+var Codec = require('./codec.js');
+
+var State = {
+  IDLE: 1,
+  RECV: 2
+};
+
+var Listener = function(config) {
+  'use strict';
+
+  config = config || {};
+
+  this.options = _.defaults({}, {
+    peakThreshold: -65,
+    minRunLength: 2,
+    codec: new Codec(),
+    context: new AudioContext(),
+    timeout: 300,
+    debug: false
+  });
+
+  this.peakHistory = [];
+  this.peakTimes = [];
+
+  this.callbacks = {};
+
+  this.buffer = '';
+  this.state = State.IDLE;
+  this.isRunning = false;
+
+  this.stream = null;
+  this.analyser = null;
+  this.frequencies = null;
+
+  return this;
+};
+
+Listener.prototype.start = function() {
+  'use strict';
+
+  navigator.getMedia({audio: true}, this.onStream.bind(this), this.onStreamError.bind(this));
+};
+
+Listener.prototype.stop = function() {
+  'use strict';
+
+  this.isRunning = false;
+  if (this.stream) {
+    this.stream.stop();
+  }
+};
+
+Listener.prototype.on = function(event, callback) {
+  if (event == 'message') {
+    this.callbacks.message = callback;
+  }
+};
+
+Listener.prototype.onStream = function(stream) {
+  'use strict';
+
+  this.stream = stream;
+  var input = this.options.context.createMediaStreamSource(stream);
+  var analyser = this.analyser = this.options.context.createAnalyser();
+
+  input.connect(analyser);
+
+  this.frequencies = new Float32Array(analyser.frequencyBinCount);
+
+  this.isRunning = true;
+
+  requestAnimationFrame(this.loop.bind(this));
+};
+
+Listener.prototype.onStreamError = function(e) {
+  console.error('Audio input error:', e);
+};
+
+Listener.prototype.loop = function() {
+  'use strict';
+
+  this.analyser.getFloatFrequencyData(this.frequencies);
+
+  var freq = this.getPeakFrequency.apply(this);
+  
+  if (freq) {
+    var character = this.options.codec.toCharacter(freq);
+    this.peakHistory.push(character);
+    this.peakTimes.push(new Date());
+  } else {
+    // If no character was detected, see if we've timed out.
+    var lastPeakTime = this.peakTimes[this.peakTimes.length - 1];
+    if (lastPeakTime && new Date() - lastPeakTime > this.timeout) {
+      // Last detection was over 300ms ago.
+      this.state = State.IDLE;
+      this.peakTimes = [];
+    }
+  }
+
+  this.analysePeaks.apply(this);
+
+  if (this.isRunning) {
+    requestAnimationFrame(this.loop.bind(this));
+  }
+};
+
+Listener.prototype.indexToFreq = function(index) {
+  var nyquist = this.options.context.sampleRate / 2;
+  return nyquist / this.frequencies.length * index;
+};
+
+Listener.prototype.freqToIndex = function(frequency) {
+  var nyquist = this.options.context.sampleRate / 2;
+  return Math.round(frequency / nyquist * this.frequencies.length);
+};
+
+Listener.prototype.analysePeaks = function() {
+  // Look for runs of repeated characters.
+  var character = this.getLastRun();
+  if (!character) {
+    return;
+  }
+  console.log('character', character);
+  if (this.state == State.IDLE) {
+    // If idle, look for start character to go into recv mode.
+    if (character == this.options.codec.options.startChar) {
+      this.buffer = '';
+      this.state = State.RECV;
+    }
+  } else if (this.state == State.RECV) {
+    // If receiving, look for character changes.
+    if (character != this.lastChar &&
+        character != this.options.codec.options.startChar && character != this.options.codec.options.endChar) {
+      this.buffer += character;
+      this.lastChar = character;
+    }
+    // Also look for the end character to go into idle mode.
+    if (character == this.options.codec.options.endChar) {
+      this.state = State.IDLE;
+      this.callbacks.message.apply(null, this.buffer);
+      this.buffer = '';
+    }
+  }
+};
+
+Listener.prototype.getLastRun = function() {
+  var lastChar = this.peakHistory[this.peakHistory.length - 1];
+  var runLength = 0;
+  // Look at the peakHistory array for patterns like ajdlfhlkjxxxxxx$.
+  for (var i = this.peakHistory.length - 2; i >= 0; i--) {
+    var character = this.peakHistory[i]
+    if (character == lastChar) {
+      runLength += 1;
+    } else {
+      break;
+    }
+  }
+  if (runLength > this.options.minRunLength) {
+    // Remove it from the buffer.
+    this.peakHistory.splice(i + 1, runLength + 1);
+    return lastChar;
+  }
+  return null;
+};
+
+Listener.prototype.getPeakFrequency = function() {
+  // Find where to start.
+  var start = this.freqToIndex(this.options.codec.options.minFreq);
+  // TODO: use first derivative to find the peaks, and then find the largest peak.
+  // Just do a max over the set.
+  var max = -Infinity;
+  var index = -1;
+  for (var i = start; i < this.frequencies.length; i++) {
+    if (this.frequencies[i] > max) {
+      max = this.frequencies[i];
+      index = i;
+    }
+  }
+  // Only care about sufficiently tall peaks.
+  if (max > this.options.peakThreshold) {
+    return this.indexToFreq(index);
+  }
+  return null;
+};
+
+module.exports = Listener;
+},{"./codec.js":1,"bluebird":9,"lodash":46}],5:[function(require,module,exports){
 var AudioContext = window.AudioContext || window.webkitAudioContext;
 
 var _ = require('lodash');
 var Promise = require('bluebird');
-var Codec = require('./codec');
+var Codec = require('./codec.js');
 
 var Sender = function(config) {
   'use strict';
   config = config || {};
   this.options = _.defaults(config, {
     codec: new Codec(),
-    characterDuration: 0.2,
+    characterDuration: 0.5,
     rampDuration: 0.001,
     context: new AudioContext()
   });
@@ -133,7 +329,7 @@ Sender.prototype.sendTone = function(freq, startTime, duration) {
 };
 
 module.exports = Sender;
-},{"./codec":1,"bluebird":8,"lodash":45}],5:[function(require,module,exports){
+},{"./codec.js":1,"bluebird":9,"lodash":46}],6:[function(require,module,exports){
 /**
  * Copyright (c) 2014 Petka Antonov
  * 
@@ -191,7 +387,7 @@ module.exports = function(Promise, Promise$_CreatePromiseArray, PromiseArray) {
 
 };
 
-},{"./assert.js":6,"./some_promise_array.js":39}],6:[function(require,module,exports){
+},{"./assert.js":7,"./some_promise_array.js":40}],7:[function(require,module,exports){
 /**
  * Copyright (c) 2014 Petka Antonov
  * 
@@ -243,7 +439,7 @@ module.exports = (function(){
     };
 })();
 
-},{}],7:[function(require,module,exports){
+},{}],8:[function(require,module,exports){
 /**
  * Copyright (c) 2014 Petka Antonov
  * 
@@ -341,7 +537,7 @@ Async.prototype._reset = function Async$_reset() {
 
 module.exports = new Async();
 
-},{"./assert.js":6,"./queue.js":32,"./schedule.js":35,"./util.js":43}],8:[function(require,module,exports){
+},{"./assert.js":7,"./queue.js":33,"./schedule.js":36,"./util.js":44}],9:[function(require,module,exports){
 /**
  * Copyright (c) 2014 Petka Antonov
  * 
@@ -367,7 +563,7 @@ module.exports = new Async();
 "use strict";
 var Promise = require("./promise.js")();
 module.exports = Promise;
-},{"./promise.js":24}],9:[function(require,module,exports){
+},{"./promise.js":25}],10:[function(require,module,exports){
 /**
  * Copyright (c) 2014 Petka Antonov
  * 
@@ -424,7 +620,7 @@ module.exports = function(Promise) {
     };
 };
 
-},{}],10:[function(require,module,exports){
+},{}],11:[function(require,module,exports){
 /**
  * Copyright (c) 2014 Petka Antonov
  * 
@@ -504,7 +700,7 @@ module.exports = function(Promise, INTERNAL) {
     };
 };
 
-},{"./assert.js":6,"./async.js":7,"./errors.js":14}],11:[function(require,module,exports){
+},{"./assert.js":7,"./async.js":8,"./errors.js":15}],12:[function(require,module,exports){
 /**
  * Copyright (c) 2014 Petka Antonov
  * 
@@ -744,7 +940,7 @@ var captureStackTrace = (function stackDetection() {
 return CapturedTrace;
 };
 
-},{"./assert.js":6,"./es5.js":16,"./util.js":43}],12:[function(require,module,exports){
+},{"./assert.js":7,"./es5.js":17,"./util.js":44}],13:[function(require,module,exports){
 /**
  * Copyright (c) 2014 Petka Antonov
  * 
@@ -839,7 +1035,7 @@ CatchFilter.prototype.doFilter = function CatchFilter$_doFilter(e) {
 return CatchFilter;
 };
 
-},{"./errors.js":14,"./es5.js":16,"./util.js":43}],13:[function(require,module,exports){
+},{"./errors.js":15,"./es5.js":17,"./util.js":44}],14:[function(require,module,exports){
 /**
  * Copyright (c) 2014 Petka Antonov
  * 
@@ -925,7 +1121,7 @@ function Promise$thenThrow(reason) {
 };
 };
 
-},{"./assert.js":6,"./util.js":43}],14:[function(require,module,exports){
+},{"./assert.js":7,"./util.js":44}],15:[function(require,module,exports){
 /**
  * Copyright (c) 2014 Petka Antonov
  * 
@@ -1041,7 +1237,7 @@ module.exports = {
     canAttach: canAttach
 };
 
-},{"./es5.js":16,"./global.js":20,"./util.js":43}],15:[function(require,module,exports){
+},{"./es5.js":17,"./global.js":21,"./util.js":44}],16:[function(require,module,exports){
 /**
  * Copyright (c) 2014 Petka Antonov
  * 
@@ -1081,7 +1277,7 @@ function apiRejection(msg) {
 return apiRejection;
 };
 
-},{"./errors.js":14}],16:[function(require,module,exports){
+},{"./errors.js":15}],17:[function(require,module,exports){
 /**
  * Copyright (c) 2014 Petka Antonov
  * 
@@ -1172,7 +1368,7 @@ else {
     };
 }
 
-},{}],17:[function(require,module,exports){
+},{}],18:[function(require,module,exports){
 /**
  * Copyright (c) 2014 Petka Antonov
  * 
@@ -1228,7 +1424,7 @@ module.exports = function(Promise) {
     };
 };
 
-},{"./assert.js":6,"./util.js":43}],18:[function(require,module,exports){
+},{"./assert.js":7,"./util.js":44}],19:[function(require,module,exports){
 /**
  * Copyright (c) 2014 Petka Antonov
  * 
@@ -1333,7 +1529,7 @@ module.exports = function(Promise, NEXT_FILTER) {
     };
 };
 
-},{"./util.js":43}],19:[function(require,module,exports){
+},{"./util.js":44}],20:[function(require,module,exports){
 /**
  * Copyright (c) 2014 Petka Antonov
  * 
@@ -1387,7 +1583,7 @@ module.exports = function(Promise, apiRejection, INTERNAL) {
     };
 };
 
-},{"./errors.js":14,"./promise_spawn.js":28}],20:[function(require,module,exports){
+},{"./errors.js":15,"./promise_spawn.js":29}],21:[function(require,module,exports){
 (function (process,global){
 /**
  * Copyright (c) 2014 Petka Antonov
@@ -1433,7 +1629,7 @@ module.exports = (function(){
 })();
 
 }).call(this,require("/Users/tanepiper/work/pebblecode/adon-soundlib/node_modules/browserify/node_modules/insert-module-globals/node_modules/process/browser.js"),typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"/Users/tanepiper/work/pebblecode/adon-soundlib/node_modules/browserify/node_modules/insert-module-globals/node_modules/process/browser.js":44}],21:[function(require,module,exports){
+},{"/Users/tanepiper/work/pebblecode/adon-soundlib/node_modules/browserify/node_modules/insert-module-globals/node_modules/process/browser.js":45}],22:[function(require,module,exports){
 /**
  * Copyright (c) 2014 Petka Antonov
  * 
@@ -1564,7 +1760,7 @@ module.exports = function(
     };
 };
 
-},{"./assert.js":6}],22:[function(require,module,exports){
+},{"./assert.js":7}],23:[function(require,module,exports){
 /**
  * Copyright (c) 2014 Petka Antonov
  * 
@@ -1630,7 +1826,7 @@ module.exports = function(Promise) {
     };
 };
 
-},{"./assert.js":6,"./async.js":7,"./util.js":43}],23:[function(require,module,exports){
+},{"./assert.js":7,"./async.js":8,"./util.js":44}],24:[function(require,module,exports){
 /**
  * Copyright (c) 2014 Petka Antonov
  * 
@@ -1746,7 +1942,7 @@ module.exports = function(Promise, isPromiseArrayProxy) {
     };
 };
 
-},{"./assert.js":6,"./async.js":7,"./errors.js":14,"./util.js":43}],24:[function(require,module,exports){
+},{"./assert.js":7,"./async.js":8,"./errors.js":15,"./util.js":44}],25:[function(require,module,exports){
 (function (process){
 /**
  * Copyright (c) 2014 Petka Antonov
@@ -2908,7 +3104,7 @@ return Promise;
 };
 
 }).call(this,require("/Users/tanepiper/work/pebblecode/adon-soundlib/node_modules/browserify/node_modules/insert-module-globals/node_modules/process/browser.js"))
-},{"./any.js":5,"./assert.js":6,"./async.js":7,"./call_get.js":9,"./cancel.js":10,"./captured_trace.js":11,"./catch_filter.js":12,"./direct_resolve.js":13,"./errors.js":14,"./errors_api_rejection":15,"./filter.js":17,"./finally.js":18,"./generators.js":19,"./global.js":20,"./map.js":21,"./nodeify.js":22,"./progress.js":23,"./promise_array.js":25,"./promise_resolver.js":27,"./promisify.js":29,"./props.js":31,"./race.js":33,"./reduce.js":34,"./settle.js":36,"./some.js":38,"./synchronous_inspection.js":40,"./thenables.js":41,"./timers.js":42,"./util.js":43,"/Users/tanepiper/work/pebblecode/adon-soundlib/node_modules/browserify/node_modules/insert-module-globals/node_modules/process/browser.js":44}],25:[function(require,module,exports){
+},{"./any.js":6,"./assert.js":7,"./async.js":8,"./call_get.js":10,"./cancel.js":11,"./captured_trace.js":12,"./catch_filter.js":13,"./direct_resolve.js":14,"./errors.js":15,"./errors_api_rejection":16,"./filter.js":18,"./finally.js":19,"./generators.js":20,"./global.js":21,"./map.js":22,"./nodeify.js":23,"./progress.js":24,"./promise_array.js":26,"./promise_resolver.js":28,"./promisify.js":30,"./props.js":32,"./race.js":34,"./reduce.js":35,"./settle.js":37,"./some.js":39,"./synchronous_inspection.js":41,"./thenables.js":42,"./timers.js":43,"./util.js":44,"/Users/tanepiper/work/pebblecode/adon-soundlib/node_modules/browserify/node_modules/insert-module-globals/node_modules/process/browser.js":45}],26:[function(require,module,exports){
 /**
  * Copyright (c) 2014 Petka Antonov
  * 
@@ -3139,7 +3335,7 @@ function PromiseArray$_promiseRejected(reason, index) {
 return PromiseArray;
 };
 
-},{"./assert.js":6,"./async.js":7,"./errors.js":14,"./util.js":43}],26:[function(require,module,exports){
+},{"./assert.js":7,"./async.js":8,"./errors.js":15,"./util.js":44}],27:[function(require,module,exports){
 /**
  * Copyright (c) 2014 Petka Antonov
  * 
@@ -3207,7 +3403,7 @@ PromiseInspection.prototype.error = function PromiseInspection$error() {
 
 module.exports = PromiseInspection;
 
-},{"./errors.js":14}],27:[function(require,module,exports){
+},{"./errors.js":15}],28:[function(require,module,exports){
 /**
  * Copyright (c) 2014 Petka Antonov
  * 
@@ -3361,7 +3557,7 @@ function PromiseResolver$_setCarriedStackTrace(trace) {
 
 module.exports = PromiseResolver;
 
-},{"./async.js":7,"./errors.js":14,"./es5.js":16,"./util.js":43}],28:[function(require,module,exports){
+},{"./async.js":8,"./errors.js":15,"./es5.js":17,"./util.js":44}],29:[function(require,module,exports){
 /**
  * Copyright (c) 2014 Petka Antonov
  * 
@@ -3470,7 +3666,7 @@ PromiseSpawn.prototype._next = function PromiseSpawn$_next(value) {
 return PromiseSpawn;
 };
 
-},{"./errors.js":14,"./util.js":43}],29:[function(require,module,exports){
+},{"./errors.js":15,"./util.js":44}],30:[function(require,module,exports){
 /**
  * Copyright (c) 2014 Petka Antonov
  * 
@@ -3745,7 +3941,7 @@ Promise.promisifyAll = function Promise$PromisifyAll(target) {
 };
 
 
-},{"./assert.js":6,"./es5.js":16,"./promise_resolver.js":27,"./util.js":43}],30:[function(require,module,exports){
+},{"./assert.js":7,"./es5.js":17,"./promise_resolver.js":28,"./util.js":44}],31:[function(require,module,exports){
 /**
  * Copyright (c) 2014 Petka Antonov
  * 
@@ -3825,7 +4021,7 @@ PromiseArray.PropertiesPromiseArray = PropertiesPromiseArray;
 return PropertiesPromiseArray;
 };
 
-},{"./assert.js":6,"./es5.js":16,"./util.js":43}],31:[function(require,module,exports){
+},{"./assert.js":7,"./es5.js":17,"./util.js":44}],32:[function(require,module,exports){
 /**
  * Copyright (c) 2014 Petka Antonov
  * 
@@ -3892,7 +4088,7 @@ module.exports = function(Promise, PromiseArray) {
     };
 };
 
-},{"./errors_api_rejection":15,"./properties_promise_array.js":30,"./util.js":43}],32:[function(require,module,exports){
+},{"./errors_api_rejection":16,"./properties_promise_array.js":31,"./util.js":44}],33:[function(require,module,exports){
 /**
  * Copyright (c) 2014 Petka Antonov
  * 
@@ -4030,7 +4226,7 @@ Queue.prototype._resizeTo = function Queue$_resizeTo(capacity) {
 
 module.exports = Queue;
 
-},{"./assert.js":6}],33:[function(require,module,exports){
+},{"./assert.js":7}],34:[function(require,module,exports){
 /**
  * Copyright (c) 2014 Petka Antonov
  * 
@@ -4117,7 +4313,7 @@ module.exports = function(Promise, INTERNAL) {
 
 };
 
-},{"./errors_api_rejection.js":15,"./util.js":43}],34:[function(require,module,exports){
+},{"./errors_api_rejection.js":16,"./util.js":44}],35:[function(require,module,exports){
 /**
  * Copyright (c) 2014 Petka Antonov
  * 
@@ -4294,7 +4490,7 @@ module.exports = function(
     };
 };
 
-},{"./assert.js":6}],35:[function(require,module,exports){
+},{"./assert.js":7}],36:[function(require,module,exports){
 (function (process){
 /**
  * Copyright (c) 2014 Petka Antonov
@@ -4418,7 +4614,7 @@ else {
 module.exports = schedule;
 
 }).call(this,require("/Users/tanepiper/work/pebblecode/adon-soundlib/node_modules/browserify/node_modules/insert-module-globals/node_modules/process/browser.js"))
-},{"./assert.js":6,"./global.js":20,"/Users/tanepiper/work/pebblecode/adon-soundlib/node_modules/browserify/node_modules/insert-module-globals/node_modules/process/browser.js":44}],36:[function(require,module,exports){
+},{"./assert.js":7,"./global.js":21,"/Users/tanepiper/work/pebblecode/adon-soundlib/node_modules/browserify/node_modules/insert-module-globals/node_modules/process/browser.js":45}],37:[function(require,module,exports){
 /**
  * Copyright (c) 2014 Petka Antonov
  * 
@@ -4469,7 +4665,7 @@ module.exports =
 
 };
 
-},{"./settled_promise_array.js":37}],37:[function(require,module,exports){
+},{"./settled_promise_array.js":38}],38:[function(require,module,exports){
 /**
  * Copyright (c) 2014 Petka Antonov
  * 
@@ -4532,7 +4728,7 @@ function SettledPromiseArray$_promiseRejected(reason, index) {
 return SettledPromiseArray;
 };
 
-},{"./assert.js":6,"./promise_inspection.js":26,"./util.js":43}],38:[function(require,module,exports){
+},{"./assert.js":7,"./promise_inspection.js":27,"./util.js":44}],39:[function(require,module,exports){
 /**
  * Copyright (c) 2014 Petka Antonov
  * 
@@ -4593,7 +4789,7 @@ function(Promise, Promise$_CreatePromiseArray, PromiseArray, apiRejection) {
 
 };
 
-},{"./assert.js":6,"./some_promise_array.js":39}],39:[function(require,module,exports){
+},{"./assert.js":7,"./some_promise_array.js":40}],40:[function(require,module,exports){
 /**
  * Copyright (c) 2014 Petka Antonov
  * 
@@ -4726,7 +4922,7 @@ function SomePromiseArray$_canPossiblyFulfill() {
 return SomePromiseArray;
 };
 
-},{"./errors.js":14,"./util.js":43}],40:[function(require,module,exports){
+},{"./errors.js":15,"./util.js":44}],41:[function(require,module,exports){
 /**
  * Copyright (c) 2014 Petka Antonov
  * 
@@ -4758,7 +4954,7 @@ module.exports = function(Promise) {
     };
 };
 
-},{"./promise_inspection.js":26}],41:[function(require,module,exports){
+},{"./promise_inspection.js":27}],42:[function(require,module,exports){
 /**
  * Copyright (c) 2014 Petka Antonov
  * 
@@ -4899,7 +5095,7 @@ module.exports = function(Promise, INTERNAL) {
     Promise._cast = Promise$_Cast;
 };
 
-},{"./assert.js":6,"./errors.js":14,"./util.js":43}],42:[function(require,module,exports){
+},{"./assert.js":7,"./errors.js":15,"./util.js":44}],43:[function(require,module,exports){
 /**
  * Copyright (c) 2014 Petka Antonov
  * 
@@ -5016,7 +5212,7 @@ module.exports = function(Promise, INTERNAL) {
 
 };
 
-},{"./assert.js":6,"./errors.js":14,"./errors_api_rejection":15,"./global.js":20,"./util.js":43}],43:[function(require,module,exports){
+},{"./assert.js":7,"./errors.js":15,"./errors_api_rejection":16,"./global.js":21,"./util.js":44}],44:[function(require,module,exports){
 /**
  * Copyright (c) 2014 Petka Antonov
  * 
@@ -5202,7 +5398,7 @@ var ret = {
 
 module.exports = ret;
 
-},{"./assert.js":6,"./es5.js":16,"./global.js":20}],44:[function(require,module,exports){
+},{"./assert.js":7,"./es5.js":17,"./global.js":21}],45:[function(require,module,exports){
 // shim for using process in browser
 
 var process = module.exports = {};
@@ -5257,7 +5453,7 @@ process.chdir = function (dir) {
     throw new Error('process.chdir is not supported');
 };
 
-},{}],45:[function(require,module,exports){
+},{}],46:[function(require,module,exports){
 (function (global){
 /**
  * @license

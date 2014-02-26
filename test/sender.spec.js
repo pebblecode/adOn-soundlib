@@ -9,12 +9,11 @@ describe('sender', function() {
     sender = new Sender();
   });
 
-  it('should send message via audio context', function() {
-    var str = 'abcdefg';
-    sender.sendMessage(str)
-      .then(function() {
-        expect(true).toBe(true);
-      });
+  it('should have an audioContext', function() {
+    expect(sender.options.context).toBeTruthy();
+  });
 
-  })
+  it('should create a gain node', function() {
+    expect(sender.options.context.createGainNode()).toBeTruthy();
+  });
 });

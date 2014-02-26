@@ -2,9 +2,9 @@
   "name": "adon-soundlib",
   "version": "0.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "lib/index.js",
   "scripts": {
-    "test": "node_modules/jasmine-node/bin/jasmine-node test",
+    "test": "node_modules/.bin/karma start --single-run",
     "build": "browserify -r ./lib/index.js -o ./build/adon-soundlib.js"
   },
   "author": "",
