@@ -12,7 +12,7 @@ var Codec = function(config) {
     minFreq: 18500,
     maxFreq: 21000,
     errorMargin: 50,
-    characters: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ',
+    characters: 'abcdefghijklmABCDEFGHIJKLM0123456789',
     startCharacter: '^',
     endCharacter: '$',
     stopCharacter: '.'
@@ -62,9 +62,9 @@ Codec.prototype.toCharacter = function(frequency) {
 
 Codec.prototype.encodeString = function(characterString) {
   'use strict';
-
-  characterString = characterString.split('').join('.');
-  console.log(characterString);
+  //console.log('is this called');
+  //characterString = characterString.split('').join('.');
+  //console.log(characterString);
 
   var frequencyArray = [];
   var i, j;
@@ -150,12 +150,12 @@ Listener.prototype.stop = function() {
   'use strict';
 
   this.isRunning = false;
+  this.state = State.IDLE;
+  this.buffer = '';
+  this.peakHistory = [];
+  this.peakTimes = [];
 
   if (this.stream) {
-    this.buffer = '';
-    this.peakHistory = [];
-    this.peakTimes = [];
-
     this.stream.stop();
   }
 
@@ -194,7 +194,6 @@ Listener.prototype.loop = function() {
   var freq = this.getPeakFrequency.apply(this);
 
   if (freq) {
-    this.state = State.RECV;
 
     this.emit('frequency', freq);
 
@@ -254,11 +253,10 @@ Listener.prototype.analysePeaks = function() {
   } else if (this.state === State.RECV) {
     // If receiving, look for character changes.
     if (character !== this.lastCharacter &&
-        //character !== this.options.codec.options.stopCharacter &&
         character !== this.options.codec.options.startCharacter &&
         character !== this.options.codec.options.endCharacter) {
 
-      this.buffer += character;
+      this.buffer += (character !== this.options.codec.options.stopCharacter) ? character : '';
       this.lastCharacter = character;
     } else if (character === this.options.codec.options.endCharacter) {
       // Also look for the end character to go into idle mode.
@@ -323,13 +321,10 @@ var Sender = function(config) {
   config = config || {};
   this.options = _.defaults(config, {
     codec: new Codec(),
-    characterDuration: 0.2,
+    characterDuration: 0.15,
     rampDuration: 0.001,
     context: new AudioContext()
   });
-
-  //this.gainNode = this.options.createGainNode();
-  //this.oscillator = this.options.createOscillator();
 
   return this;
 };
