@@ -5,16 +5,41 @@
 </head>
 
 <body>
-  
+
   <script src="../build/adon-soundlib.js"></script>
   <script>
     var adOnSoundLib = require('./lib/index.js')
-    var listener = window.listener = new adOnSoundLib.Listener()
-    listener.on('message', function() {
-      console.log(arguments);
+    var listener = window.listener = new adOnSoundLib.Listener();
+
+    listener.on('frequency', function(freq) {
+      //console.log(freq);
     });
 
-    listener.start();
+    listener.on('rawchar', function(character) {
+      //console.log('rawchar', character);
+    });
+
+    listener.on('character', function(character) {
+      console.log('character', character);
+    });
+
+    listener.on('idle', function() {
+      //console.log('idle')
+    })
+
+    listener.on('end', function(message) {
+      console.log('end', message);
+      listener.stop();
+    });
+
+    function startListener() {
+      listener.start();
+    };
+
   </script>
+
+
+  <button onclick="startListener();">Hey you! Listen</button>
+
 </body>
 </html>
