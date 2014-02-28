@@ -62,18 +62,8 @@ Codec.prototype.toCharacter = function(frequency) {
 
 Codec.prototype.encodeString = function(characterString) {
   'use strict';
-  //console.log('is this called');
-  //characterString = characterString.split('').join('.');
-  //console.log(characterString);
 
-  var frequencyArray = [];
-  var i, j;
-  for (i = 0, j = characterString.length; i < j; i++) {
-    var freq = this.toFrequency(characterString[i]);
-    frequencyArray.push(freq);
-  }
-
-  return frequencyArray;
+  return _.map(characterString, this.toFrequency, this);
 };
 
 module.exports = Codec;
@@ -289,6 +279,14 @@ Listener.prototype.getLastRun = function() {
 Listener.prototype.getPeakFrequency = function() {
   // Find where to start.
   var start = this.freqToIndex(this.options.codec.options.minFreq);
+  // var max = _.max(this.frequencies);
+  // if (max > this.options.peakThreshold) {
+  //   console.log(_.lastIndexOf(this.frequencies, max));
+  //   return this.indexToFreq(_.lastIndexOf(this.frequencies, max));
+  // }
+  // return null;
+
+
   // TODO: use first derivative to find the peaks, and then find the largest peak.
   // Just do a max over the set.
   var max = -Infinity;
@@ -302,6 +300,7 @@ Listener.prototype.getPeakFrequency = function() {
   }
   // Only care about sufficiently tall peaks.
   if (max > this.options.peakThreshold) {
+    console.log(index);
     return this.indexToFreq(index);
   }
   return null;
@@ -341,7 +340,7 @@ Sender.prototype.sendMessage = function(message) {
       var time = this.options.context.currentTime + this.options.characterDuration * index;
       this.sendTone(freq, time, this.options.characterDuration);
     }, this);
-    setTimeout(resolve, this.options.characterDuration * message.length * 1000);
+    setTimeout(resolve.bind(this, frequencies), this.options.characterDuration * message.length * 1000);
   }.bind(this));
 };
 
