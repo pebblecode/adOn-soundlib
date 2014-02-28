@@ -341,6 +341,7 @@ Sender.prototype.sendMessage = function(message) {
       var time = this.options.context.currentTime + this.options.characterDuration * index;
       this.sendTone(freq, time, this.options.characterDuration);
     }, this);
+    setTimeout(resolve, this.options.characterDuration * message.length * 1000);
   }.bind(this));
 };
 
