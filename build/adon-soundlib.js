@@ -204,7 +204,7 @@ Listener.prototype.loop = function() {
 
       this.peakTimes = [];
 
-      this.emit('idle', this);
+      this.emit('timeout', this);
     }
   }
 
@@ -277,31 +277,10 @@ Listener.prototype.getLastRun = function() {
 };
 
 Listener.prototype.getPeakFrequency = function() {
-  // Find where to start.
   var start = this.freqToIndex(this.options.codec.options.minFreq);
-  // var max = _.max(this.frequencies);
-  // if (max > this.options.peakThreshold) {
-  //   console.log(_.lastIndexOf(this.frequencies, max));
-  //   return this.indexToFreq(_.lastIndexOf(this.frequencies, max));
-  // }
-  // return null;
-
-
-  // TODO: use first derivative to find the peaks, and then find the largest peak.
-  // Just do a max over the set.
-  var max = -Infinity;
-  var index = -1;
-
-  for (var i = start; i < this.frequencies.length; i++) {
-    if (this.frequencies[i] > max) {
-      max = this.frequencies[i];
-      index = i;
-    }
-  }
-  // Only care about sufficiently tall peaks.
+  var max = _.max(this.frequencies.subarray(start));
   if (max > this.options.peakThreshold) {
-    console.log(index);
-    return this.indexToFreq(index);
+    return this.indexToFreq(_.lastIndexOf(this.frequencies, max));
   }
   return null;
 };
