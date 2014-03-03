@@ -12,8 +12,14 @@
     var sender = new adOnSoundLib.Sender()
 
     function send() {
-      sender.sendMessage('abcdefghijklmABCDEFGHIJKLM0123456789', function() {
+      sender.sendMessage('abcdefghijklmABCDEFGHIJKLM0123456789');
 
+      sender.on('tone', function() {
+        console.log('tone', arguments);
+      });
+
+      sender.on('end', function() {
+        console.log('end');
       });
     };
   </script>
