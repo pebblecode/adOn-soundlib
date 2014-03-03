@@ -1,0 +1,45 @@
+<!doctype html>
+<html>
+<head>
+  <title>Listen example</title>
+</head>
+
+<body>
+
+  <script src="http://code.jquery.com/jquery-2.1.0.min.js"></script>
+  <script src="../build/adon-soundlib.js"></script>
+  <script>
+    var adOnSoundLib = require('./lib/index.js')
+    var listener = window.listener = new adOnSoundLib.Listener({
+      codec: new adOnSoundLib.Codec({
+        characters: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=:;,._-',
+        stopCharacter: '`'
+      })
+    });
+
+    listener.on('frequency', function(freq) {
+      console.log(freq);
+    });
+
+    listener.on('character', function(character) {
+      console.log('character', character);
+    });
+
+    listener.on('end', function(message) {
+      console.log('end', message);
+      $('.output').attr('src', message);
+      listener.stop();
+    });
+
+    function startListener() {
+      listener.start();
+    };
+
+  </script>
+
+
+  <button onclick="startListener();">Hey you! Listen</button>
+  <img class="output" />
+
+</body>
+</html>

@@ -1,0 +1,60 @@
+<!doctype html>
+<html>
+<head>
+  <title>Modem Sender example</title>
+</head>
+
+<body>
+
+  <div class="row">
+    <input type="url" id="img-src" class="img-src" name="img-src" value="http://localhost:8000/example/img/microphone.png"/>
+    <button type="button" class="submit">Submit</button>
+  </div>
+
+  <script>
+    function convertImgToBase64(url, callback, outputFormat){
+    	var canvas = document.createElement('CANVAS');
+    	var ctx = canvas.getContext('2d');
+    	var img = new Image;
+    	img.crossOrigin = 'Anonymous';
+    	img.onload = function(){
+    		canvas.height = img.height;
+    		canvas.width = img.width;
+    	  	ctx.drawImage(img,0,0);
+    	  	var dataURL = canvas.toDataURL(outputFormat || 'image/png');
+    	  	callback.call(this, dataURL);
+            // Clean up
+    	  	canvas = null;
+    	};
+    	img.src = url;
+    };
+  </script>
+
+  <script src="http://code.jquery.com/jquery-2.1.0.min.js"></script>
+  <script src="../build/adon-soundlib.js"></script>
+  <script>
+    var adOnSoundLib = require('./lib/index.js')
+    var sender = new adOnSoundLib.Sender({
+      characterDuration: 0.3,
+      codec: new adOnSoundLib.Codec({
+        characters: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=:;,._-',
+        stopCharacter: '`'
+      })
+    });
+
+    $('.submit').on('click', function(e) {
+      e.preventDefault();
+
+      var url = $('.img-src').val();
+      console.log(url);
+      convertImgToBase64(url, function(base64Img) {
+        console.log(base64Img)
+        sender.sendMessage(base64Img.toString(), true)
+        .then(function(sender) {
+          console.log(sender);
+        })
+      });
+    });
+  </script>
+</body>
+</html>

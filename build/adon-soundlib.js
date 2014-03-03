@@ -1,5 +1,13 @@
 require=(function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);throw new Error("Cannot find module '"+o+"'")}var f=n[o]={exports:{}};t[o][0].call(f.exports,function(e){var n=t[o][1][e];return s(n?n:e)},f,f.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
-// codec.js
+/**
+ *  codec.js
+ *  Copyright 2014 Pebble{code} Ltd
+ *  Authors
+ *    Tane Piper <tane@pebblecode.com>
+ *
+ *  The Codec provides the functionality around encoding and decoding characters
+ *  to and from frequencies based on a specified range.
+ */
 
 var _ = require('lodash');
 
@@ -30,39 +38,36 @@ Codec.prototype.toFrequency = function(char) {
   var index = this.characters.indexOf(char);
 
   if (index < 0) {
-    //throw new Error('The character ' + char + ' is not within range');
-    return;
+    return null;
   }
 
-  var percent = index / this.characters.length;
-  var offset = Math.round(this.frequencyRange * percent);
-  return this.options.minFreq + offset;
+  return this.options.minFreq + Math.round(this.frequencyRange * (index / this.characters.length));
 };
 
 Codec.prototype.toCharacter = function(frequency) {
   'use strict';
 
-  if (!((this.options.minFreq - this.options.errorMargin) < frequency && frequency < (this.options.maxFreq + this.options.errorMargin))) {
-    // Do error handling here, for now we just return an error
-    //throw new Error('This frequency is not within the allowed range');
-    console.log('frequency out of range');
-    return;
+  if (!((this.options.minFreq - this.options.errorMargin) < frequency &&
+         frequency < (this.options.maxFreq + this.options.errorMargin))) {
+
+    return null;
   }
 
   var percent = (frequency - this.options.minFreq) / this.frequencyRange;
   var index = Math.round(this.characters.length * percent);
   var character = this.characters[index];
   if (!character) {
-    //throw new Error('No character was found at frequency ' + frequency);
-    return;
+    return null;
   }
 
   return character;
 };
 
-Codec.prototype.encodeString = function(characterString) {
+Codec.prototype.encodeString = function(characterString, addStops) {
   'use strict';
-
+  if (addStops) {
+    characterString = characterString.split('').join(this.options.stopCharacter);
+  }
   return _.map(characterString, this.toFrequency, this);
 };
 
@@ -84,7 +89,7 @@ navigator.getMedia = ( navigator.getUserMedia ||
 var _ = require('lodash');
 var Promise = require('bluebird');
 var Codec = require('./codec.js');
-var util = require('util')
+var util = require('util');
 var EventEmitter = require('events').EventEmitter;
 
 var State = {
@@ -97,7 +102,7 @@ var Listener = function(config) {
 
   config = config || {};
 
-  this.options = _.defaults({}, {
+  this.options = _.defaults(config, {
     peakThreshold: -65,
     minRunLength: 2,
     codec: new Codec(),
@@ -261,7 +266,7 @@ Listener.prototype.getLastRun = function() {
   var runLength = 0;
   // Look at the peakHistory array for patterns like ajdlfhlkjxxxxxx$.
   for (var i = this.peakHistory.length - 2; i >= 0; i--) {
-    var character = this.peakHistory[i]
+    var character = this.peakHistory[i];
     if (character === lastCharacter) {
       runLength += 1;
     } else {
@@ -304,22 +309,30 @@ var Sender = function(config) {
     context: new AudioContext()
   });
 
+  this.buffer = '';
+  this.frequencies = [];
+
   return this;
 };
 
-Sender.prototype.sendMessage = function(message) {
+Sender.prototype.sendMessage = function(message, addStops) {
   'use strict';
+
+  this.buffer = '';
+  this.frequencies = [];
 
   return new Promise(function(resolve, reject) {
 
-    message = this.options.codec.options.startCharacter + message + this.options.codec.options.endCharacter;
+    this.buffer = this.options.codec.options.startCharacter + message + this.options.codec.options.endCharacter;
 
-    var frequencies = this.options.codec.encodeString(message);
-    _(frequencies).forEach(function(freq, index) {
-      var time = this.options.context.currentTime + this.options.characterDuration * index;
-      this.sendTone(freq, time, this.options.characterDuration);
+    this.frequencies = this.options.codec.encodeString(this.buffer, addStops);
+    _(this.frequencies).forEach(function(freq, index) {
+      var time = parseFloat((this.options.context.currentTime + this.options.characterDuration * index).toFixed(6));
+      requestAnimationFrame(function() {
+        this.sendTone(freq, time, this.options.characterDuration);
+      }.bind(this));
     }, this);
-    setTimeout(resolve.bind(this, frequencies), this.options.characterDuration * message.length * 1000);
+    setTimeout(resolve.bind(this, this), this.options.characterDuration * message.length * 1000);
   }.bind(this));
 };
 
