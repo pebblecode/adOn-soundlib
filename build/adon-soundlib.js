@@ -27,7 +27,10 @@ var Codec = function(config) {
   });
 
   this.frequencyRange = this.options.maxFreq - this.options.minFreq;
+
   this.characters = this.options.startCharacter + this.options.characters + this.options.endCharacter + this.options.stopCharacter;
+
+  this.buffer = '';
 
   return this;
 };
@@ -68,7 +71,9 @@ Codec.prototype.encodeString = function(characterString, addStops) {
   if (addStops) {
     characterString = characterString.split('').join(this.options.stopCharacter);
   }
-  return _.map(characterString, this.toFrequency, this);
+  this.buffer = this.options.startCharacter + characterString + this.options.endCharacter;
+
+  return _.map(this.buffer, this.toFrequency, this);
 };
 
 module.exports = Codec;
@@ -323,16 +328,21 @@ Sender.prototype.sendMessage = function(message, addStops) {
 
   return new Promise(function(resolve, reject) {
 
-    this.buffer = this.options.codec.options.startCharacter + message + this.options.codec.options.endCharacter;
+    this.buffer = message;
 
     this.frequencies = this.options.codec.encodeString(this.buffer, addStops);
+
     _(this.frequencies).forEach(function(freq, index) {
       var time = parseFloat((this.options.context.currentTime + this.options.characterDuration * index).toFixed(6));
+
       requestAnimationFrame(function() {
         this.sendTone(freq, time, this.options.characterDuration);
       }.bind(this));
+
     }, this);
-    setTimeout(resolve.bind(this, this), this.options.characterDuration * message.length * 1000);
+
+    setTimeout(resolve.bind(this, this), this.options.characterDuration * this.frequencies.length * 1000);
+
   }.bind(this));
 };
 
