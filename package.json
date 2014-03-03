@@ -5,7 +5,7 @@
   "main": "lib/index.js",
   "scripts": {
     "test": "node_modules/.bin/karma start --single-run",
-    "build": "browserify -r ./lib/index.js -o ./build/adon-soundlib.js"
+    "build": "browserify -d -r ./lib/index.js -o ./build/adon-soundlib.js"
   },
   "author": "",
   "license": "ISC",
