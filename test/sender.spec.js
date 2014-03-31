@@ -10,15 +10,15 @@ describe('sender', function() {
   });
 
   it('should have an audioContext', function() {
-    expect(sender.options.context).toBeTruthy();
+    expect(sender.context).toBeTruthy();
   });
 
   it('should create a gain node', function() {
-    expect(sender.options.context.createGainNode()).toBeTruthy();
+    expect(sender.context.createGainNode()).toBeTruthy();
   });
 
   it('should create a oscillator', function() {
-    expect(sender.options.context.createOscillator()).toBeTruthy();
+    expect(sender.context.createOscillator()).toBeTruthy();
   });
 
   it('should send a message and return a promise', function() {
