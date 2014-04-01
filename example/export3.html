@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+<head>
+  <title>Sender example</title>
+</head>
+
+<body>
+
+  <script src="../build/adon-soundlib.js"></script>
+  <script>
+    var adOnSoundLib = require('./lib/index.js')
+    var exporter = new adOnSoundLib.Export()
+
+    function send() {
+      exporter.exportMessage('abcdefghijklmABCDEFGHIJKLM0123456789');
+
+      exporter.on('tone', function() {
+        console.log('tone', arguments);
+      });
+
+      exporter.on('end', function(ctxExport) {
+        console.log('end', ctxExport);
+      });
+    };
+  </script>
+
+  <button class="sender" onclick="send();">Send</button>
+
+</body>
+</html>
