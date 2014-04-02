@@ -9,13 +9,20 @@
   <script src="../build/adon-soundlib.js"></script>
   <script>
     var adOnSoundLib = require('./lib/index.js')
-    var exporter = new adOnSoundLib.Export()
+    var exporter = new adOnSoundLib.Export();
 
     function send() {
       exporter.exportMessage('abcdefghijklmABCDEFGHIJKLM0123456789');
 
       exporter.on('tone', function() {
         console.log('tone', arguments);
+      });
+
+      exporter.on('export', function(audioBlob) {
+        var a = document.createElement('a');
+        a.href = window.URL.createObjectURL(audioBlob);
+        a.download = 'foo.wav';
+        a.click();
       });
 
       exporter.on('end', function(ctxExport) {
