@@ -14,7 +14,7 @@ describe('sender', function() {
   });
 
   it('should create a gain node', function() {
-    expect(sender.context.createGainNode()).toBeTruthy();
+    expect(sender.context.createGain()).toBeTruthy();
   });
 
   it('should create a oscillator', function() {
